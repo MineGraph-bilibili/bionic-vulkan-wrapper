@@ -464,6 +464,35 @@ WRAPPER_CmdExecuteCommands(VkCommandBuffer commandBuffer,
       wcb->dispatch_handle, commandBufferCount, command_buffers);
 }
 
+/* Mali says 'prefers dedicated allocation' for most images; DXVK 1.x then allocates one VkDeviceMemory
+ * per texture (= one kbase allocation = one VMA each). Clear the preference so DXVK sub-allocates from its chunks;
+ * requiresDedicatedAllocation is left untouched. */
+static void clear_dedicated_preference(VkMemoryRequirements2* pMemoryRequirements)
+{
+   vk_foreach_struct(pnext, pMemoryRequirements->pNext) {
+      if (pnext->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS) {
+         VkMemoryDedicatedRequirements* d = (VkMemoryDedicatedRequirements*) pnext;
+         if (!d->requiresDedicatedAllocation) d->prefersDedicatedAllocation = VK_FALSE;
+      }
+   }
+}
+
+WRAPPER_GetImageMemoryRequirements2(VkDevice device,
+                                    const VkImageMemoryRequirementsInfo2* pInfo,
+                                    VkMemoryRequirements2* pMemoryRequirements)
+{
+   CHECKV(GetImageMemoryRequirements2(device, pInfo, pMemoryRequirements));
+   clear_dedicated_preference(pMemoryRequirements);
+}
+
+WRAPPER_GetBufferMemoryRequirements2(VkDevice device,
+                                     const VkBufferMemoryRequirementsInfo2* pInfo,
+                                     VkMemoryRequirements2* pMemoryRequirements)
+{
+   CHECKV(GetBufferMemoryRequirements2(device, pInfo, pMemoryRequirements));
+   clear_dedicated_preference(pMemoryRequirements);
+}
+
 WRAPPER_AllocateCommandBuffers(VkDevice _device,
                                const VkCommandBufferAllocateInfo* pAllocateInfo,
                                VkCommandBuffer* pCommandBuffers)
